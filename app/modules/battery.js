@@ -2,7 +2,7 @@
 const { app } = require( 'electron' )
 const { exec } = require( 'node:child_process' )
 const { log, alert, wait, confirm } = require( './helpers' )
-const { get_force_discharge_setting } = require( './settings' )
+const { get_force_discharge_setting, get_offline_mode_setting } = require( './settings' )
 const { USER } = process.env
 const path_fix = 'PATH=/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
 const battery = `${ path_fix } battery`
@@ -125,11 +125,19 @@ const initialize_battery = async () => {
         const { development, skipupdate } = process.env
         if( development ) log( `Dev mode on, skip updates: ${ skipupdate }` )
 
-        // Check for network
-        const online = await Promise.race( [
-            exec_async( `${ path_fix } curl -I https://icanhazip.com &> /dev/null` ).then( () => true ).catch( () => false ),
-            exec_async( `${ path_fix } curl -I https://github.com &> /dev/null` ).then( () => true ).catch( () => false )
-        ] )
+        // Check for network (or use offline mode setting)
+        const offline_mode_enabled = get_offline_mode_setting()
+        let online = false
+        
+        if( offline_mode_enabled ) {
+            log( `Offline mode enabled, skipping network check` )
+            online = false
+        } else {
+            online = await Promise.race( [
+                exec_async( `${ path_fix } curl -I https://icanhazip.com &> /dev/null` ).then( () => true ).catch( () => false ),
+                exec_async( `${ path_fix } curl -I https://github.com &> /dev/null` ).then( () => true ).catch( () => false )
+            ] )
+        }
         log( `Internet online: ${ online }` )
 
         // Check if battery is installed and visudo entries are complete. New visudo entries are added when we do new `sudo` stuff in battery.sh
@@ -168,7 +176,10 @@ const initialize_battery = async () => {
 
         // If installed, update
         if( is_installed && visudo_complete ) {
-            if( !online ) return log( `Skipping battery update because we are offline` )
+            if( !online ) {
+                const reason = offline_mode_enabled ? `offline mode is enabled` : `we are offline`
+                return log( `Skipping battery update because ${ reason }` )
+            }
             if( skipupdate ) return log( `Skipping update due to environment variable` )
             log( `Updating battery...` )
             const result = await exec_async( `${ battery } update silent` ).catch( e => e )
@@ -178,7 +189,12 @@ const initialize_battery = async () => {
         // If not installed, run install script
         if( !is_installed ) {
             log( `Installing battery for ${ USER }...` )
-            if( !online ) return alert( `Battery needs an internet connection to download the latest version, please connect to the internet and open the app again.` )
+            if( !online ) {
+                const message = offline_mode_enabled 
+                    ? `Battery needs an internet connection to download the latest version. Please disable offline mode in Advanced Settings or connect to the internet and open the app again.`
+                    : `Battery needs an internet connection to download the latest version, please connect to the internet and open the app again.`
+                return alert( message )
+            }
             if( !is_installed ) await alert( `Welcome to the Battery limiting tool. The app needs to install/update some components, so it will ask for your password. This should only be needed once.` )
             const result = await exec_sudo_async( `curl -s https://raw.githubusercontent.com/actuallymentor/battery/main/setup.sh | bash -s -- $USER` )
             log( `Install result success `, result )

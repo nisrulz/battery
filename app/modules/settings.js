@@ -3,6 +3,9 @@ const { log, confirm } = require( './helpers' )
 const store = new Store( {
     force_discharge_if_needed: {
         type: 'boolean'
+    },
+    offline_mode_enabled: {
+        type: 'boolean'
     }
 } )
 
@@ -13,10 +16,23 @@ const get_force_discharge_setting = () => {
     return force_discharge_if_needed === true
 }
 
+const get_offline_mode_setting = () => {
+    // Check if offline mode is enabled
+    const offline_mode_enabled = store.get( 'offline_mode_enabled' )
+    log( `Offline mode setting: ${ typeof offline_mode_enabled } ${ offline_mode_enabled }` )
+    return offline_mode_enabled === true
+}
+
 const toggle_force_discharge = () => {
     const status = get_force_discharge_setting()
     log( `Setting force discharge to ${ !status }` )
     store.set( 'force_discharge_if_needed', !status )
+}
+
+const toggle_offline_mode = () => {
+    const status = get_offline_mode_setting()
+    log( `Setting offline mode to ${ !status }` )
+    store.set( 'offline_mode_enabled', !status )
 }
 
 // Update the force discharge setting
@@ -44,5 +60,7 @@ const update_force_discharge_setting = async () => {
 module.exports = {
     get_force_discharge_setting,
     toggle_force_discharge,
-    update_force_discharge_setting
+    update_force_discharge_setting,
+    get_offline_mode_setting,
+    toggle_offline_mode
 }
